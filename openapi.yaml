@@ -1,0 +1,304 @@
+openapi: 3.0.3
+info:
+  title: Product Semantic Search API
+  description: >
+    Multimodal product search system using CLIP embeddings and pgvector similarity search.
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8000/v1
+    description: Logic Server
+  - url: http://localhost:8000/model/v1
+    description: Model Server
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+
+    # AUTH SCHEMAS
+
+    RegisterRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+
+    AuthResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+        token_type:
+          type: string
+          example: Bearer
+
+    # PRODUCT SCHEMAS
+
+    Product:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        price:
+          type: number
+          format: float
+        currency:
+          type: string
+        image_url:
+          type: string
+        source_url:
+          type: string
+        similarity_score:
+          type: number
+          format: float
+
+    SearchRequest:
+      type: object
+      properties:
+        text:
+          type: string
+          nullable: true
+        image_base64:
+          type: string
+          nullable: true
+        top_k:
+          type: integer
+          default: 10
+        sort_by:
+          type: string
+          enum: [price_asc, price_desc]
+          default: price_asc
+
+    SearchResponse:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Product'
+
+    RatingRequest:
+      type: object
+      required: [product_id, rating]
+      properties:
+        product_id:
+          type: string
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+
+    RatingResponse:
+      type: object
+      properties:
+        message:
+          type: string
+
+    # MODEL SCHEMAS
+
+    EmbedRequest:
+      type: object
+      properties:
+        text:
+          type: string
+          nullable: true
+        image_multipart/form-data:
+          type: string
+          nullable: true
+
+    EmbedResponse:
+      type: object
+      properties:
+        embedding:
+          type: array
+          items:
+            type: number
+            format: float
+
+    FineTuneRequest:
+      type: object
+      properties:
+        dataset_path:
+          type: string
+          description: Path to training dataset
+        epochs:
+          type: integer
+          default: 1
+        learning_rate:
+          type: number
+          format: float
+          default: 0.00001
+
+    FineTuneResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        message:
+          type: string
+
+paths:
+
+  # AUTH ENDPOINTS
+
+  /auth/register:
+    post:
+      summary: Register new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '200':
+          description: Successful registration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+
+  /auth/login:
+    post:
+      summary: Login user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Successful login
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+
+  # SEARCH ENDPOINT
+
+  /search:
+    post:
+      summary: Search products using text or image
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchRequest'
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+
+  # PRODUCT DETAIL
+
+  /products/{id}:
+    get:
+      summary: Get product details
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Product detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+
+  # RATE MATCHES
+
+  /ratings:
+    post:
+      summary: Rate a product match
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RatingRequest'
+      responses:
+        '200':
+          description: Rating stored
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RatingResponse'
+
+  # MODEL SERVER ENDPOINTS
+
+  /embed:
+    post:
+      summary: Generate embedding from text or image
+      servers:
+        - url: http://localhost:8000/model/v1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmbedRequest'
+      responses:
+        '200':
+          description: Embedding vector
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmbedResponse'
+
+  /fine-tune:
+    post:
+      summary: Fine-tune CLIP model (optional, offline process)
+      servers:
+        - url: http://localhost:8000/model/v1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FineTuneRequest'
+      responses:
+        '200':
+          description: Fine-tune status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FineTuneResponse'
